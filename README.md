@@ -37,6 +37,8 @@ Para usar este script en tu bóveda de Obsidian, sigue estos pasos:
     - `nota`: Tu calificación (0-10).
         
     - `tipo`: (ej: individual, saga)
+
+    [📄 Ver Plantilla YAML](plantillas/Plantilla-YAML.md)
         
 
 ## 📂 Archivos en este repositorio
