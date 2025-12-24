@@ -39,6 +39,10 @@ Para usar este script en tu bóveda de Obsidian, sigue estos pasos:
     - `tipo`: (ej: individual, saga)
 
     [📄 Ver Plantilla YAML](plantillas/Plantilla-YAML.md)
+
+    ### Visualización de archivo con formato YAML:
+
+    ![Imagen de cómo se vería un ejemplo de información sobre un libro con formato YAML](img/EjemploVisualizacionYAML.png)
         
 
 ## 📂 Archivos en este repositorio
@@ -50,11 +54,13 @@ Para usar este script en tu bóveda de Obsidian, sigue estos pasos:
 
 ## 🛠️ Uso
 
-1. Crea una nota nueva en Obsidian (ej: `Estadísticas de libros 2025`).
+1. Crea una nota nueva en Obsidian (ej: `Estadísticas de libros`).
     
 2. Ejecuta el comando de Templater: `Templater: Insert template`.
     
-3. Selecciona esta plantilla y ¡listo! El reporte se generará automáticamente analizando todos los archivos en la ruta configurada (por defecto `Entretenimiento/Libros`).
+3. Selecciona esta plantilla y ¡listo! El reporte se generará automáticamente analizando todos los archivos en la ruta configurada.
+
+IMPORTANTE: se debe configurar la ruta en la que se buscarán archivos con formato YAML manualmente desde el archivo .md que se vaya a ejecutar en Obsidian (Por defecto: /Entretenimiento/Libros).
 
 ## Ejemplo de visualización
 
