@@ -60,7 +60,7 @@ Para usar este script en tu bóveda de Obsidian, sigue estos pasos:
     
 3. Selecciona esta plantilla y ¡listo! El reporte se generará automáticamente analizando todos los archivos en la ruta configurada.
 
-IMPORTANTE: se debe configurar la ruta en la que se buscarán archivos con formato YAML manualmente desde el archivo .md que se vaya a ejecutar en Obsidian (Por defecto: /Entretenimiento/Libros).
+IMPORTANTE: se debe configurar la ruta en la que se buscarán archivos con formato YAML manualmente desde el archivo .md que se vaya a ejecutar en Obsidian (Por defecto: Entretenimiento/Libros).
 
 ## Ejemplo de visualización
 
