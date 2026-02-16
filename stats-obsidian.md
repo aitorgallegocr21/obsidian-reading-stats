@@ -73,7 +73,7 @@ try {
         if (!fm || !fm.paginas || !fm.estado) continue;
 
         // Filtros de exclusión explícitos
-        if (file.name.includes("Estadísticas de libros") || file.name.includes("Plantilla")) continue;
+        if (file.name.includes("Estadísticas de libros") || file.name.includes("Template")) continue;
 
         try {
             // --- Extracción de Datos ---

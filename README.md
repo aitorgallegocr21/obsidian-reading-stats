@@ -38,16 +38,16 @@ Para usar este script en tu bóveda de Obsidian, sigue estos pasos:
         
     - `tipo`: (ej: individual, saga)
 
-    [📄 Ver Plantilla YAML](plantillas/Plantilla-YAML.md)
+    [📄 Ver Plantilla YAML](assets/templates/YAML-Template.md)
 
     ### Visualización de archivo con formato YAML:
 
-    ![Imagen de cómo se vería un ejemplo de información sobre un libro con formato YAML](img/EjemploVisualizacionYAML.png)
+    ![Imagen de cómo se vería un ejemplo de información sobre un libro con formato YAML](assets/img/EjemploVisualizacionYAML.png)
         
 
 ## 📂 Archivos en este repositorio
 
-- `stats_script.js`: El código fuente en JavaScript puro. Ideal para desarrolladores que quieran revisar la lógica o aplicar resaltado de sintaxis en editores externos.
+- `src/stats.js`: El código fuente en JavaScript puro. Ideal para desarrolladores que quieran revisar la lógica o aplicar resaltado de sintaxis en editores externos.
     
 - `stats-obsidian.md`: El archivo listo para usar en Obsidian. Contiene el código envuelto en las etiquetas de Templater (`<%* ... %>`).
     
