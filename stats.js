@@ -2,6 +2,7 @@ try {
     // ------------------------------------------------------------------
     // CONFIGURACIÓN
     // ------------------------------------------------------------------
+
     const RUTA_LIBROS = "Entretenimiento/Libros"; 
     const PROPIEDAD_FECHA = "leido_fin"; 
 
@@ -10,6 +11,7 @@ try {
     // ------------------------------------------------------------------
     // RECOLECCIÓN DE DATOS
     // ------------------------------------------------------------------
+
     const files = app.vault.getMarkdownFiles();
     
     let biblioteca = [];
@@ -79,8 +81,26 @@ try {
 
 
     // ------------------------------------------------------------------
-    // CÁLCULOS GENERALES
+    // CÁLCULOS GENERALES Y LÓGICA DINÁMICA DE AÑOS
     // ------------------------------------------------------------------
+    
+    // --- Detección automática del año de corte ---
+    // Se busca cuál es el año más antiguo que existe en los libros leídos.
+    
+    const aniosRegistrados = biblioteca
+        .filter(b => b.estado === "leido" && b.anio !== null) // Solo libros leídos y con fecha
+        .map(b => b.anio);
+
+    // Se calcula el año mínimo. Si no hay ningún año registrado, se usa el año actual por defecto.
+    const minAnioRegistrado = aniosRegistrados.length > 0 
+        ? Math.min(...aniosRegistrados) 
+        : new Date().getFullYear();
+
+    // Se define la etiqueta dinámica para los libros sin fecha
+    // Ej: Si el libro más viejo es de 2021, los sin fecha serán "Antes de 2021"
+    const ETIQUETA_SIN_FECHA = `Antes de ${minAnioRegistrado}`;
+
+    // Creación de datos
     let stats = {
         totalLibrosLeidos: 0, totalPaginasLeidas: 0,
         librosIndividuales: 0, librosSagas: 0,
@@ -96,45 +116,53 @@ try {
     let listaAbandonados = [];
     let sumaPaginasSoloLeidos = 0; 
     
-    // Contadores para años (LIBROS)
-    let conteoAnios = { "Antes de 2023": 0 };
+    // Se inicializan los contadores de años
+    // Se usa la etiqueta dinámica calculada arriba como clave inicial
+    let conteoAnios = {};
+    conteoAnios[ETIQUETA_SIN_FECHA] = 0;
+    
     let maxLibrosEnUnAnio = 0; 
 
     // Contadores para años (PÁGINAS)
-    let conteoPaginasAnios = { "Antes de 2023": 0 };
+    let conteoPaginasAnios = {};
+    conteoPaginasAnios[ETIQUETA_SIN_FECHA] = 0;
+    
     let maxPaginasEnUnAnio = 0;
 
+    // --- Bucle principal de procesamiento ---
     for (let libro of biblioteca) {
-        // LEÍDOS
+        
+        // CASO 1: LIBROS LEÍDOS
+
         if (libro.estado === "leido") {
             stats.totalLibrosLeidos++;
             stats.totalPaginasLeidas += libro.paginas;
             sumaPaginasSoloLeidos += libro.paginas; 
             listaLeidos.push(libro);
 
-            // --- Lógica de Años ---
-            let labelAnio = "Antes de 2023";
-            if (libro.anio && libro.anio >= 2023) {
-                labelAnio = libro.anio.toString();
-            }
+            // --- Lógica de Asignación de Años ---
+            // Si el libro tiene año, se usa ese año. Si no (es null), se usa la etiqueta "Antes de..."
+            let labelAnio = libro.anio ? libro.anio.toString() : ETIQUETA_SIN_FECHA;
             
-            // 1. Conteo de Libros
+            // Conteo de Libros por Año
             if (!conteoAnios[labelAnio]) conteoAnios[labelAnio] = 0;
             conteoAnios[labelAnio]++;
             
+            // Se actualiza el récord de libros en un año (para la barra de progreso)
             if (conteoAnios[labelAnio] > maxLibrosEnUnAnio) {
                 maxLibrosEnUnAnio = conteoAnios[labelAnio];
             }
 
-            // 2. Conteo de Páginas
+            // Conteo de Páginas por Año
             if (!conteoPaginasAnios[labelAnio]) conteoPaginasAnios[labelAnio] = 0;
             conteoPaginasAnios[labelAnio] += libro.paginas;
 
+            // Se actualiza el récord de páginas en un año
             if (conteoPaginasAnios[labelAnio] > maxPaginasEnUnAnio) {
                 maxPaginasEnUnAnio = conteoPaginasAnios[labelAnio];
             }
-            // ---------------------
 
+            // Clasificación por Tipo y Valoración
             if (libro.tipo === "saga") {
                 stats.librosSagas++;
                 stats.paginasSagas += libro.paginas;
@@ -153,7 +181,9 @@ try {
                 }
             }
         } 
-        // ABANDONADOS
+
+        // CASO 2: LIBROS ABANDONADOS
+
         else if (libro.estado === "abandonado") {
             stats.librosAbandonados++;
             stats.paginasAbandonadas += libro.paginas_leidas_abandonado;
@@ -170,6 +200,7 @@ try {
     // ------------------------------------------------------------------
     // RANKINGS Y MEDIAS
     // ------------------------------------------------------------------
+
     const topPaginas = [...listaLeidos, ...listaAbandonados].sort((a, b) => b.paginas - a.paginas);
     
     const mediaPaginas = stats.totalLibrosLeidos > 0 
@@ -210,6 +241,7 @@ try {
     // ------------------------------------------------------------------
     // SALIDA
     // ------------------------------------------------------------------
+
     let r = "";
     if (log !== "") r += `⚠️ ADVERTENCIAS:\n${log}\n\n`;
 
@@ -232,10 +264,12 @@ try {
     r += "| Año | Progreso Visual | Cantidad |\n";
     r += "| :--- | :--- | :--- |\n";
 
+    // Se ordenan los años de Mayor a Menor (Descendente)
+    // Se fuerza a que la etiqueta "Antes de..." vaya siempre al final
     const aniosOrdenados = Object.keys(conteoAnios).sort((a, b) => {
-        if (a === "Antes de 2023") return 1; 
-        if (b === "Antes de 2023") return -1;
-        return b - a; 
+        if (a === ETIQUETA_SIN_FECHA) return 1;  // Mover al final
+        if (b === ETIQUETA_SIN_FECHA) return -1; // Mover al final
+        return b - a; // Orden numérico descendente (2025, 2024...)
     });
 
     for (let anio of aniosOrdenados) {
@@ -251,7 +285,7 @@ try {
     }
     r += "\n";
 
-	// --- APARTADO DE PÁGINAS ---
+	// --- Páginas ---
     r += "## 📖 Páginas\n\n";
     
     r += `**📄 Páginas totales leídas: ${stats.totalPaginasLeidas}**\n`;
@@ -267,9 +301,10 @@ try {
     r += "| Año | Progreso Visual | Cantidad |\n";
     r += "| :--- | :--- | :--- |\n";
 
+    // Se aplica la misma lógica de ordenación dinámica para las páginas
     const aniosPaginasOrdenados = Object.keys(conteoPaginasAnios).sort((a, b) => {
-        if (a === "Antes de 2023") return 1; 
-        if (b === "Antes de 2023") return -1;
+        if (a === ETIQUETA_SIN_FECHA) return 1; 
+        if (b === ETIQUETA_SIN_FECHA) return -1;
         return b - a; 
     });
 
