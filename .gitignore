@@ -1,0 +1,9 @@
+# Configuración de Antigravity e IA
+.antigravity
+.agent/
+.geminiignore
+
+# Logs y temporales
+*.log
+node_modules/
+.DS_Store

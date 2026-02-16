@@ -1,255 +1,267 @@
 <%*
 try {
     // ------------------------------------------------------------------
-    // CONFIGURACIÓN
+    // CONFIGURACIÓN E INICIALIZACIÓN
     // ------------------------------------------------------------------
 
-    const RUTA_LIBROS = "Entretenimiento/Libros"; 
-    const PROPIEDAD_FECHA = "leido_fin"; 
+    // Nombre de la propiedad Frontmatter usada para la fecha de fin de lectura
+    const PROPIEDAD_FECHA = "leido_fin";
 
+    // Almacenes de datos
+    let listaLeidos = [];
+    let listaAbandonados = [];
 
+    // Objeto principal de estadísticas acumuladas
+    // Se calculan al vuelo para evitar recorrer arrays múltiples veces
+    let stats = {
+        totalLibrosLeidos: 0,
+        totalPaginasLeidas: 0,
+        librosIndividuales: 0,
+        librosSagas: 0,
+        paginasIndividuales: 0,
+        paginasSagas: 0,
+        librosGustados: 0,
+        librosNoGustados: 0,
+        librosGustadosIndividuales: 0,
+        librosGustadosSagas: 0,
+        librosNoGustadosIndividuales: 0,
+        librosNoGustadosSagas: 0,
+        paginasGustadas: 0,
+        paginasNoGustadas: 0,
+        librosAbandonados: 0,
+        paginasAbandonadas: 0
+    };
+
+    // Acumuladores auxiliares para medias
+    let sumaPaginasSoloLeidos = 0;
+    let sumaNotas = 0;
+    let cuentaNotas = 0;
+
+    // Estructuras para el desglose por Años
+    let conteoAnios = {};          // Cantidad de libros por año numérico
+    let conteoPaginasAnios = {};   // Cantidad de páginas por año numérico
+
+    // Contadores temporales para libros sin fecha (se asignarán etiqueta al final)
+    let librosSinFecha = 0;
+    let paginasSinFecha = 0;
+
+    // Seguimiento del año mínimo para la etiqueta dinámica
+    let minAnioRegistrado = new Date().getFullYear(); // Por defecto año actual
+
+    let maxLibrosEnUnAnio = 0;
+    let maxPaginasEnUnAnio = 0;
+
+    let log = "";
+    const anioActual = new Date().getFullYear();
 
     // ------------------------------------------------------------------
-    // RECOLECCIÓN DE DATOS
+    // PROCESAMIENTO DE ARCHIVOS
     // ------------------------------------------------------------------
+    // Se recorre toda la bóveda pero filtrando por metadatos 'cacheado'
+    // Esto es mucho más rápido que leer el contenido de cada archivo.
 
     const files = app.vault.getMarkdownFiles();
-    
-    let biblioteca = [];
-    let log = ""; 
 
     for (let file of files) {
-        if (!file.path.startsWith(RUTA_LIBROS)) continue;
-        if (file.name.includes("Estadísticas de libros") || file.name.includes("Plantilla")) continue;
 
+        // --- Validación Eficiente ---
+        // Usamos metadataCache para no leer disco si no es necesario.
+        // Identificamos "Libro" por la existencia de 'paginas' y 'estado'.
         const fileCache = app.metadataCache.getFileCache(file);
         const fm = fileCache?.frontmatter;
 
-        if (!fm) continue; 
+        if (!fm || !fm.paginas || !fm.estado) continue;
+
+        // Filtros de exclusión explícitos
+        if (file.name.includes("Estadísticas de libros") || file.name.includes("Plantilla")) continue;
 
         try {
+            // --- Extracción de Datos ---
             const paginasRaw = fm.paginas;
             const notaRaw = fm.nota;
             const paginasLeidasRaw = fm.paginas_leidas;
-            
-            // --- Extraer año de lectura ---
+            // Normalización de cadenas
+            const estado = fm.estado ? fm.estado.toString().toLowerCase() : "sin leer";
+            const tipo = fm.tipo ? fm.tipo.toString().toLowerCase() : "individual";
+            const formato = fm.formato ? fm.formato.toString().toLowerCase() : "";
+
+            // Procesamos la fecha
             const fechaRaw = fm[PROPIEDAD_FECHA];
             let anioLeido = null;
-            
             if (fechaRaw) {
                 const dateObj = new Date(fechaRaw);
                 if (!isNaN(dateObj)) {
                     anioLeido = dateObj.getFullYear();
+                    // Actualizar año mínimo global
+                    if (anioLeido < minAnioRegistrado) minAnioRegistrado = anioLeido;
                 }
             }
-            // -----------------------------
 
-            const datos = {
+            // Construimos el objeto libro
+            const libro = {
                 titulo: file.basename,
                 path: file.path,
-                estado: fm.estado ? fm.estado.toString().toLowerCase() : "sin leer",
-                tipo: fm.tipo ? fm.tipo.toString().toLowerCase() : "individual",
-                formato: fm.formato ? fm.formato.toString().toLowerCase() : "",
-                
+                estado: estado,
+                tipo: tipo,
+                formato: formato,
                 paginas: parseInt(paginasRaw) || 0,
                 nota: parseFloat(notaRaw) || null,
                 paginas_leidas_abandonado: parseInt(paginasLeidasRaw) || 0,
-                
-                anio: anioLeido, 
-                
+                anio: anioLeido,
                 favorito: fm.favorito === true,
                 autores: fm.autor || [],
-                link: `[[${file.basename}|↗]]`
+                link: `[[${file.basename}|↗]]`,
+                valoracion: ""
             };
 
-            if (datos.nota !== null) {
-                datos.valoracion = datos.nota >= 5 ? "✅" : "❌";
+            // Cálculo de Valoración Visual
+            if (libro.nota !== null) {
+                libro.valoracion = libro.nota >= 5 ? "✅" : "❌";
             } else {
-                datos.valoracion = datos.favorito ? "✅" : "";
+                libro.valoracion = libro.favorito ? "✅" : "";
             }
-            
-            biblioteca.push(datos);
 
-        } catch (errArchivo) {
-            log += `Error leyendo archivo ${file.name}: ${errArchivo.message}\n`;
+            // --- Lógica de Acumulación ---
+
+            if (libro.estado === "leido") {
+                listaLeidos.push(libro);
+
+                // Estadísticas Globales
+                stats.totalLibrosLeidos++;
+                stats.totalPaginasLeidas += libro.paginas;
+                sumaPaginasSoloLeidos += libro.paginas;
+
+                // Estadísticas de Nota
+                if (libro.nota !== null) {
+                    sumaNotas += libro.nota;
+                    cuentaNotas++;
+                }
+
+                // Clasificación por Tipo y Gusto
+                const esSaga = (libro.tipo === "saga");
+                const leGusto = (libro.valoracion === "✅");
+
+                if (esSaga) {
+                    stats.librosSagas++;
+                    stats.paginasSagas += libro.paginas;
+                    if (leGusto) {
+                        stats.librosGustadosSagas++;
+                        stats.librosGustados++;
+                        stats.paginasGustadas += libro.paginas;
+                    } else {
+                        stats.librosNoGustadosSagas++;
+                        stats.librosNoGustados++;
+                        stats.paginasNoGustadas += libro.paginas;
+                    }
+                } else {
+                    stats.librosIndividuales++;
+                    stats.paginasIndividuales += libro.paginas;
+                    if (leGusto) {
+                        stats.librosGustadosIndividuales++;
+                        stats.librosGustados++;
+                        stats.paginasGustadas += libro.paginas;
+                    } else {
+                        stats.librosNoGustadosIndividuales++;
+                        stats.librosNoGustados++;
+                        stats.paginasNoGustadas += libro.paginas;
+                    }
+                }
+
+                // Acumulación por Años (para gráficas)
+                if (anioLeido) {
+                    let strAnio = anioLeido.toString();
+
+                    conteoAnios[strAnio] = (conteoAnios[strAnio] || 0) + 1;
+                    if (conteoAnios[strAnio] > maxLibrosEnUnAnio) maxLibrosEnUnAnio = conteoAnios[strAnio];
+
+                    conteoPaginasAnios[strAnio] = (conteoPaginasAnios[strAnio] || 0) + libro.paginas;
+                    if (conteoPaginasAnios[strAnio] > maxPaginasEnUnAnio) maxPaginasEnUnAnio = conteoPaginasAnios[strAnio];
+                } else {
+                    librosSinFecha++;
+                    paginasSinFecha += libro.paginas;
+                }
+
+            } else if (libro.estado === "abandonado") {
+                listaAbandonados.push(libro);
+
+                stats.librosAbandonados++;
+                stats.paginasAbandonadas += libro.paginas_leidas_abandonado;
+                stats.totalPaginasLeidas += libro.paginas_leidas_abandonado;
+
+                // Las notas de libros abandonados también cuentan para la media global
+                if (libro.nota !== null) {
+                    sumaNotas += libro.nota;
+                    cuentaNotas++;
+                }
+            }
+
+        } catch (err) {
+            log += `Error procesando ${file.name}: ${err.message}\n`;
         }
     }
 
-    if (biblioteca.length === 0) {
-        throw new Error(`No se han encontrado libros en: '${RUTA_LIBROS}'`);
+    // ------------------------------------------------------------------
+    // FINALIZACIÓN DE DATOS
+    // ------------------------------------------------------------------
+
+    if (listaLeidos.length === 0 && listaAbandonados.length === 0) {
+        throw new Error("No se han encontrado libros válidos (con 'paginas' y 'estado') en toda la bóveda.");
     }
 
-
-
-    // ------------------------------------------------------------------
-    // CÁLCULOS GENERALES Y LÓGICA DINÁMICA DE AÑOS
-    // ------------------------------------------------------------------
-    
-    // --- Detección automática del año de corte ---
-    // Se busca cuál es el año más antiguo que existe en los libros leídos.
-    
-    const aniosRegistrados = biblioteca
-        .filter(b => b.estado === "leido" && b.anio !== null) // Solo libros leídos y con fecha
-        .map(b => b.anio);
-
-    // Se calcula el año mínimo. Si no hay ningún año registrado, se usa el año actual por defecto.
-    const minAnioRegistrado = aniosRegistrados.length > 0 
-        ? Math.min(...aniosRegistrados) 
-        : new Date().getFullYear();
-
-    // Se define la etiqueta dinámica para los libros sin fecha
-    // Ej: Si el libro más viejo es de 2021, los sin fecha serán "Antes de 2021"
+    // Integrar libros sin fecha con la etiqueta dinámica correcta
     const ETIQUETA_SIN_FECHA = `Antes de ${minAnioRegistrado}`;
 
-    // Creación de datos
-    let stats = {
-        totalLibrosLeidos: 0, totalPaginasLeidas: 0,
-        librosIndividuales: 0, librosSagas: 0,
-        paginasIndividuales: 0, paginasSagas: 0,
-        librosGustados: 0, librosNoGustados: 0,
-        librosGustadosIndividuales: 0, librosGustadosSagas: 0,
-        librosNoGustadosIndividuales: 0, librosNoGustadosSagas: 0,
-        paginasGustadas: 0, paginasNoGustadas: 0,
-        librosAbandonados: 0, paginasAbandonadas: 0
-    };
-
-    let listaLeidos = [];
-    let listaAbandonados = [];
-    let sumaPaginasSoloLeidos = 0; 
-    
-    // Se inicializan los contadores de años
-    // Se usa la etiqueta dinámica calculada arriba como clave inicial
-    let conteoAnios = {};
-    conteoAnios[ETIQUETA_SIN_FECHA] = 0;
-    
-    let maxLibrosEnUnAnio = 0; 
-
-    // Contadores para años (PÁGINAS)
-    let conteoPaginasAnios = {};
-    conteoPaginasAnios[ETIQUETA_SIN_FECHA] = 0;
-    
-    let maxPaginasEnUnAnio = 0;
-
-    // --- Bucle principal de procesamiento ---
-    for (let libro of biblioteca) {
-        
-        // CASO 1: LIBROS LEÍDOS
-
-        if (libro.estado === "leido") {
-            stats.totalLibrosLeidos++;
-            stats.totalPaginasLeidas += libro.paginas;
-            sumaPaginasSoloLeidos += libro.paginas; 
-            listaLeidos.push(libro);
-
-            // --- Lógica de Asignación de Años ---
-            // Si el libro tiene año, se usa ese año. Si no (es null), se usa la etiqueta "Antes de..."
-            let labelAnio = libro.anio ? libro.anio.toString() : ETIQUETA_SIN_FECHA;
-            
-            // Conteo de Libros por Año
-            if (!conteoAnios[labelAnio]) conteoAnios[labelAnio] = 0;
-            conteoAnios[labelAnio]++;
-            
-            // Se actualiza el récord de libros en un año (para la barra de progreso)
-            if (conteoAnios[labelAnio] > maxLibrosEnUnAnio) {
-                maxLibrosEnUnAnio = conteoAnios[labelAnio];
-            }
-
-            // Conteo de Páginas por Año
-            if (!conteoPaginasAnios[labelAnio]) conteoPaginasAnios[labelAnio] = 0;
-            conteoPaginasAnios[labelAnio] += libro.paginas;
-
-            // Se actualiza el récord de páginas en un año
-            if (conteoPaginasAnios[labelAnio] > maxPaginasEnUnAnio) {
-                maxPaginasEnUnAnio = conteoPaginasAnios[labelAnio];
-            }
-
-            // Clasificación por Tipo y Valoración
-            if (libro.tipo === "saga") {
-                stats.librosSagas++;
-                stats.paginasSagas += libro.paginas;
-                if (libro.valoracion === "✅") {
-                    stats.librosGustadosSagas++; stats.librosGustados++; stats.paginasGustadas += libro.paginas;
-                } else if (libro.valoracion === "❌") {
-                    stats.librosNoGustadosSagas++; stats.librosNoGustados++; stats.paginasNoGustadas += libro.paginas;
-                }
-            } else { 
-                stats.librosIndividuales++;
-                stats.paginasIndividuales += libro.paginas;
-                if (libro.valoracion === "✅") {
-                    stats.librosGustadosIndividuales++; stats.librosGustados++; stats.paginasGustadas += libro.paginas;
-                } else if (libro.valoracion === "❌") {
-                    stats.librosNoGustadosIndividuales++; stats.librosNoGustados++; stats.paginasNoGustadas += libro.paginas;
-                }
-            }
-        } 
-
-        // CASO 2: LIBROS ABANDONADOS
-
-        else if (libro.estado === "abandonado") {
-            stats.librosAbandonados++;
-            stats.paginasAbandonadas += libro.paginas_leidas_abandonado;
-            stats.totalPaginasLeidas += libro.paginas_leidas_abandonado;
-            listaAbandonados.push(libro);
-        }
+    if (librosSinFecha > 0) {
+        conteoAnios[ETIQUETA_SIN_FECHA] = librosSinFecha;
+        if (librosSinFecha > maxLibrosEnUnAnio) maxLibrosEnUnAnio = librosSinFecha;
     }
 
+    if (paginasSinFecha > 0) {
+        conteoPaginasAnios[ETIQUETA_SIN_FECHA] = paginasSinFecha;
+        if (paginasSinFecha > maxPaginasEnUnAnio) maxPaginasEnUnAnio = paginasSinFecha;
+    }
+
+    // Cálculo de Medias
     const calcPct = (parcial, total) => total > 0 ? ((parcial / total) * 100).toFixed(1) : "0.0";
     const totalLibrosGlobal = stats.totalLibrosLeidos + stats.librosAbandonados;
-
-
-
-    // ------------------------------------------------------------------
-    // RANKINGS Y MEDIAS
-    // ------------------------------------------------------------------
-
-    const topPaginas = [...listaLeidos, ...listaAbandonados].sort((a, b) => b.paginas - a.paginas);
-    
-    const mediaPaginas = stats.totalLibrosLeidos > 0 
-        ? Math.round(sumaPaginasSoloLeidos / stats.totalLibrosLeidos) 
-        : 0;
-
-    const todosConNota = [...listaLeidos, ...listaAbandonados].filter(l => l.nota !== null || l.favorito);
-    const topNota = todosConNota.sort((a, b) => {
-        if (a.estado !== "abandonado" && b.estado === "abandonado") return -1;
-        if (a.estado === "abandonado" && b.estado !== "abandonado") return 1;
-        if (a.favorito && !b.favorito) return -1;
-        if (!a.favorito && b.favorito) return 1;
-        if (b.nota !== a.nota) return b.nota - a.nota;
-        return b.paginas - a.paginas;
-    });
-
-    let sumaNotas = 0;
-    let cuentaNotas = 0;
-    [...listaLeidos, ...listaAbandonados].forEach(l => {
-        if (l.nota !== null) {
-            sumaNotas += l.nota;
-            cuentaNotas++;
-        }
-    });
+    const mediaPaginas = stats.totalLibrosLeidos > 0 ? Math.round(sumaPaginasSoloLeidos / stats.totalLibrosLeidos) : 0;
     const mediaNota = cuentaNotas > 0 ? (sumaNotas / cuentaNotas).toFixed(2) : "0.00";
 
-    const rankingConNota = topNota;
-    const rankingSinNota = [...listaLeidos, ...listaAbandonados]
-        .filter(l => l.nota === null && !l.favorito)
+    // Unificación de listas para rankings
+    const todosLibros = [...listaLeidos, ...listaAbandonados];
+
+    // Top Páginas (Ordenar descendente)
+    const topPaginas = [...todosLibros].sort((a, b) => b.paginas - a.paginas);
+
+    // Top Nota (Lógica compleja de ordenación)
+    const rankingConNota = todosLibros
+        .filter(l => l.nota !== null || l.favorito)
         .sort((a, b) => {
-             if (a.estado !== "abandonado" && b.estado === "abandonado") return -1;
-             if (a.estado === "abandonado" && b.estado !== "abandonado") return 1;
-             return (b.valoracion === "✅") - (a.valoracion === "✅");
+            if (a.estado !== "abandonado" && b.estado === "abandonado") return -1; // Leídos primero
+            if (a.estado === "abandonado" && b.estado !== "abandonado") return 1;
+            if (a.favorito && !b.favorito) return -1; // Favoritos primero
+            if (!a.favorito && b.favorito) return 1;
+            if (b.nota !== a.nota && a.nota !== null && b.nota !== null) return b.nota - a.nota; // Mayor nota
+            return b.paginas - a.paginas; // Más páginas desempata
         });
 
-
+    const rankingSinNota = todosLibros
+        .filter(l => l.nota === null && !l.favorito)
+        .sort((a, b) => {
+            if (a.estado !== "abandonado" && b.estado === "abandonado") return -1;
+            if (a.estado === "abandonado" && b.estado !== "abandonado") return 1;
+            return (b.valoracion === "✅") - (a.valoracion === "✅"); // Gustados primero
+        });
 
     // ------------------------------------------------------------------
-    // SALIDA
+    // GENERACIÓN DE SALIDA (MARKDOWN)
     // ------------------------------------------------------------------
 
     let r = "";
     if (log !== "") r += `⚠️ ADVERTENCIAS:\n${log}\n\n`;
 
     r += "## Estadísticas generales\n\n";
-    
     r += `**📚 Libros leídos: ${stats.totalLibrosLeidos}**\n`;
-    
     r += `  ↳ 📕 Libros individuales: ${stats.librosIndividuales} (${calcPct(stats.librosIndividuales, stats.totalLibrosLeidos)}%)\n`;
     r += `  ↳ 📚 Libros de sagas: ${stats.librosSagas} (${calcPct(stats.librosSagas, stats.totalLibrosLeidos)}%)\n`;
     r += `  ↳ ✅ Libros que me han gustado: ${stats.librosGustados} (${calcPct(stats.librosGustados, stats.totalLibrosLeidos)}%)\n`;
@@ -260,70 +272,56 @@ try {
     r += `   ↳ Libros de sagas que no me han gustado: ${stats.librosNoGustadosSagas}\n`;
     r += `  ↳ ❌ Libros abandonados: ${stats.librosAbandonados} (${calcPct(stats.librosAbandonados, totalLibrosGlobal)}% del total de intentos)\n`;
 
-    // Tabla de libros por año
+    // Tabla: Ritmo de lectura
     r += "###### 📅 Ritmo de lectura\n";
     r += "| Año | Progreso Visual | Cantidad |\n";
     r += "| :--- | :--- | :--- |\n";
 
-    // Se ordenan los años de Mayor a Menor (Descendente)
-    // Se fuerza a que la etiqueta "Antes de..." vaya siempre al final
+    // Ordenar años descendente, con "Antes de..." al final
     const aniosOrdenados = Object.keys(conteoAnios).sort((a, b) => {
-        if (a === ETIQUETA_SIN_FECHA) return 1;  // Mover al final
-        if (b === ETIQUETA_SIN_FECHA) return -1; // Mover al final
-        return b - a; // Orden numérico descendente (2025, 2024...)
+        if (a === ETIQUETA_SIN_FECHA) return 1;
+        if (b === ETIQUETA_SIN_FECHA) return -1;
+        return b - a;
     });
 
     for (let anio of aniosOrdenados) {
         const cantidad = conteoAnios[anio];
-        const bloques = maxLibrosEnUnAnio > 0 
-            ? Math.round((cantidad / maxLibrosEnUnAnio) * 10) 
-            : 0;
-        
-        const barraLlena = "▓".repeat(bloques);
-        const barraVacia = "░".repeat(10 - bloques);
-        
-        r += `| **${anio}** | ${barraLlena}${barraVacia} | **${cantidad}** |\n`;
+        const bloques = maxLibrosEnUnAnio > 0 ? Math.round((cantidad / maxLibrosEnUnAnio) * 10) : 0;
+        const barrilete = "▓".repeat(bloques) + "░".repeat(10 - bloques);
+        r += `| **${anio}** | ${barrilete} | **${cantidad}** |\n`;
     }
     r += "\n";
 
-	// --- Páginas ---
+    // Sección Páginas
     r += "## 📖 Páginas\n\n";
-    
     r += `**📄 Páginas totales leídas: ${stats.totalPaginasLeidas}**\n`;
-    
     r += `  ↳ 📕 Páginas leídas de libros individuales: ${stats.paginasIndividuales} páginas (${calcPct(stats.paginasIndividuales, stats.totalPaginasLeidas)}%)\n`;
     r += `  ↳ 📚 Páginas leídas de libros de sagas: ${stats.paginasSagas} páginas (${calcPct(stats.paginasSagas, stats.totalPaginasLeidas)}%)\n`;
     r += `  ↳ ✅ Páginas leídas de libros gustados: ${stats.paginasGustadas} (${calcPct(stats.paginasGustadas, stats.totalPaginasLeidas)}%)\n`;
     r += `  ↳ ❌ Páginas de libros no gustados: ${stats.paginasNoGustadas} (${calcPct(stats.paginasNoGustadas, stats.totalPaginasLeidas)}%)\n`;
     r += `  ↳ ❌ Páginas de libros abandonados: ${stats.paginasAbandonadas} (${calcPct(stats.paginasAbandonadas, stats.totalPaginasLeidas)}%)\n`;
 
-    // Tabla de páginas leídas en cada año
+    // Tabla: Páginas por año
     r += "###### 📅 Páginas leídas por año\n";
     r += "| Año | Progreso Visual | Cantidad |\n";
     r += "| :--- | :--- | :--- |\n";
 
-    // Se aplica la misma lógica de ordenación dinámica para las páginas
     const aniosPaginasOrdenados = Object.keys(conteoPaginasAnios).sort((a, b) => {
-        if (a === ETIQUETA_SIN_FECHA) return 1; 
+        if (a === ETIQUETA_SIN_FECHA) return 1;
         if (b === ETIQUETA_SIN_FECHA) return -1;
-        return b - a; 
+        return b - a;
     });
 
     for (let anio of aniosPaginasOrdenados) {
         const cantidad = conteoPaginasAnios[anio];
-        const bloques = maxPaginasEnUnAnio > 0 
-            ? Math.round((cantidad / maxPaginasEnUnAnio) * 10) 
-            : 0;
-        
-        const barraLlena = "▓".repeat(bloques);
-        const barraVacia = "░".repeat(10 - bloques);
-        
-        r += `| **${anio}** | ${barraLlena}${barraVacia} | **${cantidad}** |\n`;
+        const bloques = maxPaginasEnUnAnio > 0 ? Math.round((cantidad / maxPaginasEnUnAnio) * 10) : 0;
+        const barrilete = "▓".repeat(bloques) + "░".repeat(10 - bloques);
+        r += `| **${anio}** | ${barrilete} | **${cantidad}** |\n`;
     }
 
-	// Top páginas
+    // Top Libros
     r += "###### 📚 Top de libros por páginas\n";
-    
+
     const getEstrella = (libro) => (libro.favorito && !libro.titulo.includes("⭐")) ? " ⭐" : "";
 
     topPaginas.forEach((book, index) => {
@@ -334,9 +332,8 @@ try {
 
     r += `\n**📏 Media de longitud de libros leídos: ${mediaPaginas} páginas**\n`;
 
-    // --- APARTADO DE NOTAS ---
+    // Notas Finales
     r += "\n## 📝 Notas\n\n";
-
     r += "###### 🏆 Top por nota\n";
 
     let pos = 0;
@@ -357,6 +354,7 @@ try {
 
     r += `\n**⭐ Nota media de todas las lecturas: ${mediaNota}**\n`;
 
+    // Asignación final a la variable de salida de Templater
     tR += r;
 
 } catch (e) {
