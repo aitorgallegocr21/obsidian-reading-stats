@@ -72,32 +72,30 @@ try {
 
         if (!fm || !fm.paginas || !fm.estado) continue;
 
-        // Filtros de exclusión explícitos
-        if (file.name.includes("Estadísticas de libros") || file.name.includes("Template")) continue;
-
         try {
             // --- Extracción de Datos ---
             const paginasRaw = fm.paginas;
             const notaRaw = fm.nota;
             const paginasLeidasRaw = fm.paginas_leidas;
+
             // Normalización de cadenas
             const estado = fm.estado ? fm.estado.toString().toLowerCase() : "sin leer";
             const tipo = fm.tipo ? fm.tipo.toString().toLowerCase() : "individual";
             const formato = fm.formato ? fm.formato.toString().toLowerCase() : "";
 
-            // Procesamos la fecha
+            // Se procesa la fecha
             const fechaRaw = fm[PROPIEDAD_FECHA];
             let anioLeido = null;
             if (fechaRaw) {
                 const dateObj = new Date(fechaRaw);
                 if (!isNaN(dateObj)) {
                     anioLeido = dateObj.getFullYear();
-                    // Actualizar año mínimo global
+                    // Se actualiza el año mínimo global
                     if (anioLeido < minAnioRegistrado) minAnioRegistrado = anioLeido;
                 }
             }
 
-            // Construimos el objeto libro
+            // Se construye el objeto libro
             const libro = {
                 titulo: file.basename,
                 path: file.path,
@@ -153,6 +151,7 @@ try {
                         stats.librosNoGustados++;
                         stats.paginasNoGustadas += libro.paginas;
                     }
+
                 } else {
                     stats.librosIndividuales++;
                     stats.paginasIndividuales += libro.paginas;
